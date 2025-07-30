@@ -20,17 +20,28 @@ left_col, right_col = st.columns([1, 1])
 
 with left_col:
     st.markdown("#### Input")
-    canvas_result = st_canvas(
-        fill_color="#FFFFFF",
-        stroke_width=18,
-        stroke_color="#FFFFFF",
-        background_color="#000000",
-        height=CANVAS_SIZE,
-        width=CANVAS_SIZE,
-        drawing_mode="freedraw",
-        key="canvas",
-        update_streamlit=True,
-    )
+    upload_option = st.radio("Choose input method:", ("Draw", "Upload"))
+    if upload_option == "Draw":
+        canvas_result = st_canvas(
+            fill_color="#FFFFFF",
+            stroke_width=18,
+            stroke_color="#FFFFFF",
+            background_color="#000000",
+            height=CANVAS_SIZE,
+            width=CANVAS_SIZE,
+            drawing_mode="freedraw",
+            key="canvas",
+            update_streamlit=True,
+        )
+        input_image = canvas_result.image_data if canvas_result.image_data is not None else None
+    else:
+        uploaded_file = st.file_uploader("Upload an image (PNG/JPG)", type=["png", "jpg", "jpeg"])
+        if uploaded_file is not None:
+            pil_img = Image.open(uploaded_file).convert("L").resize((CANVAS_SIZE, CANVAS_SIZE))
+            input_image = np.array(pil_img)
+            st.image(pil_img, caption="Uploaded Image", width=CANVAS_SIZE)
+        else:
+            input_image = None
 
 # Helper: crop + center like MNIST
 def crop_and_center(img):
@@ -50,9 +61,12 @@ def crop_and_center(img):
 
 # Prediction
 if st.button("Check digit"):
-    if canvas_result.image_data is not None:
-        rgba = canvas_result.image_data.astype(np.uint8)
-        gray = cv2.cvtColor(rgba, cv2.COLOR_RGBA2GRAY)
+    if input_image is not None:
+        if upload_option == "Draw":
+            rgba = input_image.astype(np.uint8)
+            gray = cv2.cvtColor(rgba, cv2.COLOR_RGBA2GRAY)
+        else:
+            gray = input_image.astype(np.uint8)
 
         # Preprocess
         processed = crop_and_center(gray)
@@ -62,15 +76,11 @@ if st.button("Check digit"):
 
         with right_col:
             st.markdown("#### Processed (28×28)")
-            # Convert processed image to a displayable format and resize to match canvas
             display_img = (processed * 255).astype(np.uint8)
-            # Resize to match the canvas size
             display_img = cv2.resize(display_img, (CANVAS_SIZE, CANVAS_SIZE), interpolation=cv2.INTER_NEAREST)
             st.image(display_img, width=CANVAS_SIZE, channels="GRAY")
 
-        # Results
         st.markdown(f"### 🔍 Prediction: **{prediction}**")
-        # Use a specific height for the bar chart to keep it compact
         st.bar_chart(output.flatten(), height=200)
     else:
-        st.warning("Please draw a digit first.")
+        st.warning("Please provide an input first.")
